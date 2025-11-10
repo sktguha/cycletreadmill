@@ -1,428 +1,554 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Sound Visualizer — Full (Filters + Send to Root + Timeout + Log)</title>
-  <style>
-    body { background:#0b0b0b; margin:0; font-family:system-ui, sans-serif; color:#dfeee3;
-      display:flex;flex-direction:column;align-items:center;padding:12px;gap:10px;}
-    h2 { color:#7cffc5; margin:6px 0; }
-    .panel { width:92%; max-width:1200px; display:flex; gap:12px; }
-    .left { flex:1; }
-    .right { width:420px; display:flex; flex-direction:column; gap:8px; }
-    canvas { width:100%; height:300px; background:#000; border-radius:10px;
-      box-shadow:0 8px 30px rgba(0,255,180,0.06); display:block; }
-    #level { font-size:1.6em; color:#0bff8a; font-weight:700; }
-    input[type="text"], textarea, input[type="number"], select {
-      width:100%; box-sizing:border-box; font-family:monospace; padding:8px;
-      border-radius:8px; border:1px solid #222; background:#050505; color:#dfeee3;
-    }
-    textarea { height:160px; resize:vertical; }
-    button { background:#0b84ff; color:#fff; border:none; padding:8px 12px;
-      border-radius:8px; cursor:pointer; }
-    .small { font-size:13px; padding:6px 8px; }
-    label { font-size:13px; color:#bfbfbf; display:flex; align-items:center; gap:8px; }
-    .controls { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:8px;}
-    input[type="range"] { width:160px; }
-    .value { min-width:64px; text-align:right; color:#bff8d9; font-weight:700; }
-    .hint { font-size:12px; color:#9aa; margin-top:6px; }
-  </style>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Sound Visualizer — Full (walk/run + WS + heartbeat)</title>
+<style>
+  body{background:#0b0b0b;color:#dfeee3;font-family:system-ui;padding:12px;display:flex;flex-direction:column;align-items:center;gap:10px}
+  h1{color:#7cffc5;margin:6px 0}
+  .layout{width:95%;max-width:1200px;display:grid;grid-template-columns:1fr 420px;gap:12px}
+  .panel{background:#0f1112;padding:12px;border-radius:10px}
+  canvas{width:100%;height:280px;background:#000;border-radius:8px;display:block}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  label{font-size:13px;color:#cfe}
+  input,select,textarea,button{font-family:monospace;padding:6px;border-radius:6px;border:1px solid #222;background:#050505;color:#dfeee3}
+  textarea{height:120px;resize:vertical}
+  button{background:#0b84ff;color:white;padding:8px 10px;border-radius:7px;border:none;cursor:pointer}
+  .small{padding:6px 8px;font-size:13px}
+  .muted{color:#9aa;font-size:13px}
+  .value{color:#bff8d9;font-weight:700}
+  .send-preview{background:#000;padding:8px;border-radius:6px;font-family:monospace;font-size:13px;color:#cfe;max-height:120px;overflow:auto}
+  .status{font-family:monospace;font-size:13px;color:#cfe}
+  .two { display:flex; gap:8px; align-items:center; }
+  .two input { width:140px; }
+</style>
 </head>
 <body>
-  <h2>🎤 Sound Visualizer — Full (Filters + Send to Root + Timeout + Log)</h2>
+  <h1>Sound Visualizer — Full (walk/run + WS + heartbeat)</h1>
 
-  <div class="panel">
-    <div class="left">
+  <div class="layout">
+    <!-- Left Panel -->
+    <div class="panel">
       <canvas id="wave"></canvas>
-
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
-        <div id="level">Level: 0.0</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
+        <div id="levelDisplay">Level: 0.00</div>
         <div>
           <button id="startBtn">Start Mic</button>
           <button id="stopBtn" class="small" disabled>Stop</button>
         </div>
       </div>
 
-      <div class="controls" style="margin-top:12px;">
-        <div style="display:flex;align-items:center;gap:8px;">
-          <label>Preamp
-            <input id="preamp" type="range" min="1" max="16" step="0.5" value="4">
-          </label>
-          <div class="value" id="preampVal">4.0×</div>
-        </div>
+      <div style="margin-top:10px" class="row">
+        <label>Preamp <input id="preamp" type="range" min="1" max="16" step="0.5" value="4"></label>
+        <div class="value" id="preampVal">4.0×</div>
 
-        <div style="display:flex;align-items:center;gap:8px;">
-          <label>Filter
-            <select id="filterMode">
-              <option value="off">Off</option>
-              <option value="bandpass" selected>Band-pass</option>
-              <option value="lowpass">Low-pass</option>
-              <option value="highpass">High-pass</option>
-            </select>
-          </label>
-        </div>
+        <label>Filter
+          <select id="filterMode">
+            <option value="off">Off</option>
+            <option value="bandpass" selected>Band-pass</option>
+            <option value="lowpass">Low-pass</option>
+            <option value="highpass">High-pass</option>
+          </select>
+        </label>
 
-        <div style="display:flex;align-items:center;gap:8px;">
-          <label>Center Hz
-            <input id="centerHz" type="range" min="40" max="2000" step="10" value="200">
-          </label>
-          <div class="value" id="centerVal">200 Hz</div>
-        </div>
+        <label>CenterHz <input id="centerHz" type="range" min="40" max="2000" step="10" value="200"></label>
+        <div class="value" id="centerVal">200 Hz</div>
 
-        <div style="display:flex;align-items:center;gap:8px;">
-          <label>Q
-            <input id="q" type="range" min="0.2" max="10" step="0.1" value="1.2">
-          </label>
-          <div class="value" id="qVal">1.2</div>
-        </div>
+        <label>Q <input id="q" type="range" min="0.2" max="10" step="0.1" value="1.2"></label>
+        <div class="value" id="qVal">1.2</div>
       </div>
 
-      <div class="hint">Tip: For treadmill motors try Band-pass ~100–500Hz, Q 1–4 and increase Preamp to 6–12 if needed.</div>
-
-      <div style="margin-top:12px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-        <button id="clearHist" class="small">Clear Wave History</button>
-        <div class="hint" id="histNote">Wave history stored in memory only (not persisted).</div>
+      <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
+        <label>Measurement <select id="sourceMode"><option value="rms">Overall RMS</option><option value="band">FFT band</option></select></label>
+        <label>FFT center <input id="fftCenter" type="range" min="40" max="2000" value="200"></label>
+        <div class="value" id="fftCenterVal">200 Hz</div>
       </div>
 
+      <div style="margin-top:10px;display:flex;gap:8px;align-items:center">
+        <label>Map scale <input id="mapScale" type="number" step="0.01" value="1" style="width:120px"></label>
+        <label>Map offset <input id="mapOffset" type="number" step="0.01" value="0" style="width:120px"></label>
+      </div>
+
+      <div style="margin-top:10px;display:flex;gap:8px;align-items:center">
+        <button id="calibrate" class="small">Auto-calibrate (3s)</button>
+        <div class="muted">Calibrate maps quiet→loud to suggested scale/offset</div>
+      </div>
     </div>
 
-    <div class="right">
-      <div style="font-weight:700; color:#bff8d9;">History Log</div>
-      <textarea id="history" readonly placeholder="Level history (timestamps)"></textarea>
-
-      <div style="display:flex;gap:8px;">
-        <button id="downloadHistory" class="small">Download History</button>
-        <button id="clearHistory" class="small">Clear</button>
+    <!-- Right Panel -->
+    <div class="panel">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+        <label>Transport
+          <select id="transportSelect">
+            <option value="http" selected>HTTP (GET/POST)</option>
+            <option value="ws">WebSocket</option>
+          </select>
+        </label>
+        <label>Port (optional) <input id="portOverride" type="text" placeholder="e.g. 8080" style="width:100px"></label>
       </div>
 
-      <hr style="border:none; height:1px; background:#222; margin:8px 0;">
-
-      <label>URL to send level (default = root `/` of current origin):</label>
-      <input id="sendUrl" type="text" placeholder="(leave empty → auto send to / )" />
-
-      <div style="display:flex; gap:8px; align-items:center; margin-top:6px;">
-        <label><input id="enableSend" type="checkbox" checked> Enable sending</label>
-        <label>Interval(ms): <input id="interval" type="number" min="100" value="1000" style="width:90px;"></label>
+      <div style="margin-bottom:8px" class="two">
+        <label style="flex:1">Target URL <input id="targetUrl" type="text" placeholder="(empty → root /)" /></label>
       </div>
 
-      <div style="display:flex; gap:8px; align-items:center; margin-top:6px;">
-        <label>Timeout(ms): <input id="timeout" type="number" min="100" value="3000" style="width:90px;"></label>
-        <button id="testSend" class="small">Send Now</button>
+      <!-- Walk/Run inputs (persisted) -->
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+        <label>Walk <input id="walk" type="text" value="1.5" title="Walk value (saved)"></label>
+        <label>Run <input id="run" type="text" value="4.5" title="Run value (saved)"></label>
       </div>
 
-      <label style="margin-top:8px;">Send Log (persistent)</label>
-      <textarea id="sendLog" readonly placeholder="Send attempts + status (saved to localStorage)"></textarea>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+        <label><input id="enableSend" type="checkbox" checked> Enable Sending</label>
+        <label>Interval(ms) <input id="sendInterval" type="number" min="50" value="500" style="width:110px"></label>
+      </div>
 
-      <div style="display:flex; gap:8px; margin-top:6px;">
-        <button id="clearLog" class="small">Clear Log</button>
-        <button id="downloadLog" class="small">Download Log</button>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+        <label>Timeout
+          <input id="timeout" type="text" value="3000"
+                 placeholder="e.g. 3000 ms or 5s"
+                 title="Abort network request if no response within this time. Accepts ms or s (e.g. 3000 / 5s)."
+                 style="width:150px">
+        </label>
+        <label>MaxRetries <input id="maxRetries" type="number" min="0" value="1" style="width:90px"></label>
+      </div>
+
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+        <label>Send Format
+          <select id="sendFormat">
+            <option value="get" selected>GET ?level=</option>
+            <option value="json">POST JSON</option>
+          </select>
+        </label>
+        <label>JSON field <input id="jsonField" type="text" value="level" style="width:120px"></label>
+      </div>
+
+      <hr style="border:none;height:1px;background:#222;margin:8px 0">
+
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+        <label>WS Heartbeat(ms) <input id="heartbeat" type="number" value="5000" style="width:110px"></label>
+        <label>Auto-reconnect <input id="autoReconnect" type="checkbox" checked></label>
+      </div>
+
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+        <button id="wsToggle" class="small">Connect WS</button>
+        <div class="status" id="connStatus">WS: disconnected</div>
+      </div>
+
+      <div style="margin-top:8px">
+        <div class="muted">Last server message</div>
+        <div id="serverMsg" class="send-preview">—</div>
+      </div>
+
+      <div style="margin-top:8px">
+        <div class="muted">Send Log (persistent)</div>
+        <textarea id="sendLog" readonly placeholder="send attempts & server messages"></textarea>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button id="clearLog" class="small">Clear Log</button>
+          <button id="downloadLog" class="small">Download Log</button>
+        </div>
+      </div>
+
+      <div style="margin-top:8px">
+        <div class="muted">Preview last sent</div>
+        <div id="lastPreview" class="send-preview">—</div>
       </div>
     </div>
   </div>
 
 <script>
-/* === Elements === */
-const canvas = document.getElementById('wave'), ctx = canvas.getContext('2d');
+/* Full script with walk/run integrated into GET params — otherwise unchanged behavior.
+   - walk/run defaults: 1.5, 4.5
+   - persisted in localStorage keys 'sv_walk' and 'sv_run'
+   - included in buildGetUrl() when sendFormat === 'get'
+*/
+
+const wave = document.getElementById('wave'), ctx = wave.getContext('2d');
+function resize(){wave.width = wave.clientWidth; wave.height = wave.clientHeight;}
+window.addEventListener('resize', resize); resize();
+
+/* Audio / UI refs */
+let audioCtx=null, mediaStream=null, source=null, analyser=null, gainNode=null, biquad=null;
+let floatBuf=null; let drawPrev = 0;
+
 const startBtn = document.getElementById('startBtn'), stopBtn = document.getElementById('stopBtn');
-const levelDisplay = document.getElementById('level');
+const levelDisplay = document.getElementById('levelDisplay');
 
-const preampEl = document.getElementById('preamp'), preampVal = document.getElementById('preampVal');
-const filterModeEl = document.getElementById('filterMode'), centerHzEl = document.getElementById('centerHz');
-const centerVal = document.getElementById('centerVal'), qEl = document.getElementById('q'), qVal = document.getElementById('qVal');
+const preamp = document.getElementById('preamp'), preampVal = document.getElementById('preampVal');
+const filterMode = document.getElementById('filterMode'), centerHz = document.getElementById('centerHz'), centerVal = document.getElementById('centerVal');
+const qEl = document.getElementById('q'), qVal = document.getElementById('qVal');
+const sourceMode = document.getElementById('sourceMode'), fftCenter = document.getElementById('fftCenter'), fftCenterVal = document.getElementById('fftCenterVal');
 
-const historyArea = document.getElementById('history');
-const clearHistory = document.getElementById('clearHistory'), downloadHistory = document.getElementById('downloadHistory');
+const transportSelect = document.getElementById('transportSelect'), portOverride = document.getElementById('portOverride');
+const targetUrl = document.getElementById('targetUrl'), enableSend = document.getElementById('enableSend');
+const sendIntervalEl = document.getElementById('sendInterval'), timeoutInput = document.getElementById('timeout');
+const sendFormat = document.getElementById('sendFormat'), jsonField = document.getElementById('jsonField'), maxRetriesEl = document.getElementById('maxRetries'), retryDelay = document.getElementById('retryDelay');
 
-const sendUrlEl = document.getElementById('sendUrl'), enableSendEl = document.getElementById('enableSend');
-const intervalEl = document.getElementById('interval'), timeoutEl = document.getElementById('timeout'), testSendBtn = document.getElementById('testSend');
+const heartbeatInput = document.getElementById('heartbeat'), autoReconnectEl = document.getElementById('autoReconnect');
+const wsToggle = document.getElementById('wsToggle'), connStatus = document.getElementById('connStatus');
+const lastPreview = document.getElementById('lastPreview'), serverMsg = document.getElementById('serverMsg');
 
-const sendLogEl = document.getElementById('sendLog'), clearLogBtn = document.getElementById('clearLog'), downloadLogBtn = document.getElementById('downloadLog');
+const sendLogArea = document.getElementById('sendLog'), clearLogBtn = document.getElementById('clearLog'), downloadLogBtn = document.getElementById('downloadLog');
 
-const STORAGE_SEND_LOG = 'sv_send_log_v2';
-const STORAGE_TIMEOUT = 'sv_timeout_v2';
-const STORAGE_SEND_URL = 'sv_send_url_v2';
-const STORAGE_SEND_LOG_LAST = 'sv_send_log_last_v2';
+const calibrateBtn = document.getElementById('calibrate'), mapScale = document.getElementById('mapScale'), mapOffset = document.getElementById('mapOffset');
 
-/* === Audio nodes & state === */
-let audioCtx = null, mediaStream = null, source = null, analyser = null, gainNode = null, biquad = null;
-let floatBuffer = null;
-let drawPrev = 0;
-let historyRecords = [];
-let sendTimer = null;
-let logTimer = null;
+/* NEW: walk/run inputs */
+const walkInput = document.getElementById('walk'), runInput = document.getElementById('run');
+(function restoreWalkRun(){
+  try{
+    const sw = localStorage.getItem('sv_walk'); const sr = localStorage.getItem('sv_run');
+    if(sw !== null) walkInput.value = sw;
+    if(sr !== null) runInput.value = sr;
+  }catch(e){}
+})();
+walkInput.addEventListener('change', ()=> { try{ localStorage.setItem('sv_walk', walkInput.value); }catch(e){} });
+runInput.addEventListener('change',  ()=> { try{ localStorage.setItem('sv_run', runInput.value); }catch(e){} });
 
-/* === Canvas resize === */
-function resizeCanvas() {
-  canvas.width = canvas.clientWidth;
-  canvas.height = canvas.clientHeight;
-}
-window.addEventListener('resize', resizeCanvas);
-resizeCanvas();
+/* persistent send log */
+const STORE_LOG = 'sv_ws_send_log_v2';
+(function(){ try{ const s = localStorage.getItem(STORE_LOG); if(s) sendLogArea.value = s; }catch(e){} })();
 
-/* === Restore persistent send log + timeout + url === */
-function restorePersistent() {
-  const savedLog = localStorage.getItem(STORAGE_SEND_LOG);
-  if (savedLog) sendLogEl.value = savedLog;
-  const t = localStorage.getItem(STORAGE_TIMEOUT);
-  if (t) timeoutEl.value = t;
-  const u = localStorage.getItem(STORAGE_SEND_URL);
-  if (u) sendUrlEl.value = u;
-}
-restorePersistent();
-
-/* === Utility: append log and persist === */
-function appendSendLog(line) {
-  const ts = new Date().toLocaleString();
-  const entry = `[${ts}] ${line}`;
-  sendLogEl.value += entry + '\n';
-  sendLogEl.scrollTop = sendLogEl.scrollHeight;
-  try { localStorage.setItem(STORAGE_SEND_LOG, sendLogEl.value); } catch(e){}
+function appendLog(msg){
+  const ts = new Date().toLocaleTimeString();
+  const line = `[${ts}] ${msg}`;
+  sendLogArea.value += line + '\n';
+  sendLogArea.scrollTop = sendLogArea.scrollHeight;
+  try{ localStorage.setItem(STORE_LOG, sendLogArea.value); }catch(e){}
+  console.log(line);
 }
 
-/* === Start/Stop mic === */
-async function startMic() {
+/* parsing helper */
+function parseTimeoutText(t){ if(!t) return 3000; const m = String(t).match(/(-?\d+(\.\d+)?)(\s*(ms|s))?/i); if(!m) return 3000; let num = parseFloat(m[1]); const unit = (m[4]||'').toLowerCase(); if(unit==='s') num = num*1000; return Math.round(num); }
+
+/* ===== audio graph ===== */
+async function startMic(){
+  try{
+    mediaStream = await navigator.mediaDevices.getUserMedia({ audio:{ echoCancellation:false, noiseSuppression:false, autoGainControl:false } });
+  } catch(e){
+    console.error('getUserMedia error:', e);
+    appendLog('Mic permission failed: ' + (e && e.message ? e.message : e));
+    alert('Microphone access failed: ' + (e && e.message ? e.message : e));
+    return;
+  }
+
   try {
-    mediaStream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        echoCancellation: false,
-        noiseSuppression: false,
-        autoGainControl: false
-      }
-    });
-  } catch (e) {
-    alert('Microphone access denied/failed: ' + (e.message || e));
-    return;
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    source = audioCtx.createMediaStreamSource(mediaStream);
+    gainNode = audioCtx.createGain(); gainNode.gain.value = parseFloat(preamp.value);
+    biquad = audioCtx.createBiquadFilter(); setFilter();
+
+    analyser = audioCtx.createAnalyser(); analyser.fftSize = 4096;
+    floatBuf = new Float32Array(analyser.fftSize);
+
+    if(filterMode.value === 'off') source.connect(gainNode); else { source.connect(biquad); biquad.connect(gainNode); }
+    gainNode.connect(analyser);
+
+    startBtn.disabled = true; stopBtn.disabled = false;
+    requestAnimationFrame(drawLoop);
+    startSendLoopIfNeeded();
+    appendLog('Mic started and audio graph created');
+  } catch(err) {
+    console.error('Audio graph setup error:', err);
+    appendLog('Audio initialization failed: ' + (err && err.message ? err.message : err));
+    alert('Audio initialization failed: ' + (err && err.message ? err.message : err));
   }
-
-  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  source = audioCtx.createMediaStreamSource(mediaStream);
-
-  // gain (preamp)
-  gainNode = audioCtx.createGain();
-  gainNode.gain.value = parseFloat(preampEl.value) || 1;
-
-  // biquad filter
-  biquad = audioCtx.createBiquadFilter();
-  setFilterParams();
-
-  // analyser for waveform / RMS
-  analyser = audioCtx.createAnalyser();
-  analyser.fftSize = 4096;
-  floatBuffer = new Float32Array(analyser.fftSize);
-
-  // connect nodes
-  if (filterModeEl.value === 'off') {
-    source.connect(gainNode);
-  } else {
-    source.connect(biquad);
-    biquad.connect(gainNode);
-  }
-  gainNode.connect(analyser);
-
-  startBtn.disabled = true;
-  stopBtn.disabled = false;
-
-  // start loops
-  requestAnimationFrame(drawLoop);
-  startHistoryLogging();
-
-  // start send loop if enabled
-  startSendLoopIfNeeded();
 }
 
-/* === Stop === */
-function stopMic() {
-  if (sendTimer) { clearInterval(sendTimer); sendTimer = null; }
-  if (logTimer) { clearInterval(logTimer); logTimer = null; }
-  try { if (mediaStream) mediaStream.getTracks().forEach(t => t.stop()); } catch(e){}
-  try { if (audioCtx) audioCtx.close(); } catch(e){}
-  audioCtx = null; mediaStream = null; source = null; analyser = null; gainNode = null; biquad = null;
+function stopMic(){
+  try{ if(mediaStream) mediaStream.getTracks().forEach(t=>t.stop()); }catch(e){}
+  try{ if(audioCtx) audioCtx.close(); }catch(e){}
+  audioCtx=null; mediaStream=null; source=null; analyser=null; gainNode=null; biquad=null;
   startBtn.disabled = false; stopBtn.disabled = true;
+  appendLog('Mic stopped');
 }
 
-/* === Filter params === */
-function setFilterParams() {
-  if (!biquad || !source || !gainNode) return;
-  const mode = filterModeEl.value;
-  if (mode === 'off') {
-    try { source.disconnect(); } catch(e){}
-    try { biquad.disconnect(); } catch(e){}
-    try { source.connect(gainNode); } catch(e){}
-    return;
+/* filter */
+function setFilter(){
+  try{
+    if(!biquad || !source) return;
+    const mode = filterMode.value;
+    if(mode === 'off'){ try{ source.disconnect(); }catch(e){} try{ biquad.disconnect(); }catch(e){} try{ source.connect(gainNode); }catch(e){} return; }
+    biquad.type = mode; biquad.frequency.value = parseFloat(centerHz.value) || 200; biquad.Q.value = parseFloat(qEl.value) || 1;
+    try{ source.disconnect(); }catch(e){} try{ biquad.disconnect(); }catch(e){} source.connect(biquad); biquad.connect(gainNode);
+  }catch(e){}
+}
+
+/* measurement */
+function computeMeasurement(){
+  if(!analyser) return 0;
+  analyser.getFloatTimeDomainData(floatBuf);
+  let sum=0; for(let i=0;i<floatBuf.length;i++) sum += floatBuf[i]*floatBuf[i];
+  const rms = Math.sqrt(sum / floatBuf.length);
+  const pre = parseFloat(preamp.value)||1;
+  const rmsLevel = Math.min(100, Math.max(0, rms * 200 * pre / 4));
+  if(sourceMode.value === 'rms') return rmsLevel;
+
+  const freqBins = new Float32Array(analyser.frequencyBinCount);
+  analyser.getFloatFrequencyData(freqBins);
+  const center = parseFloat(fftCenter.value||200);
+  const sr = audioCtx.sampleRate;
+  const binFreq = sr / analyser.fftSize;
+  const bin = Math.round(center / binFreq);
+  const width = Math.max(1, Math.round((parseFloat(qEl.value)||1)));
+  let acc=0, count=0;
+  for(let i=Math.max(0,bin-width); i<=Math.min(freqBins.length-1, bin+width); i++){
+    const db = freqBins[i];
+    const mag = Math.pow(10, db/20);
+    acc += mag; count++;
   }
-  biquad.type = mode;
-  biquad.frequency.value = parseFloat(centerHzEl.value) || 200;
-  biquad.Q.value = parseFloat(qEl.value) || 1;
-  try { source.disconnect(); } catch(e){}
-  try { biquad.disconnect(); } catch(e){}
-  source.connect(biquad);
-  biquad.connect(gainNode);
+  const avg = count? acc/count : 0;
+  const bandLevel = Math.min(100, Math.max(0, avg * 400 * pre / 4));
+  return bandLevel;
 }
 
-/* === Draw loop & level calculation === */
-function drawLoop() {
+/* draw loop */
+function drawLoop(){
   requestAnimationFrame(drawLoop);
-  if (!analyser) {
-    // clear canvas
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0,0,canvas.width, canvas.height);
-    return;
-  }
-
-  analyser.getFloatTimeDomainData(floatBuffer);
-
-  // draw waveform
-  ctx.fillStyle = '#000';
-  ctx.fillRect(0,0,canvas.width, canvas.height);
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = '#7cffc5';
-  ctx.beginPath();
-
-  const slice = canvas.width / floatBuffer.length;
-  let x = 0;
-  let sum = 0;
-  for (let i = 0; i < floatBuffer.length; i++) {
-    const v = floatBuffer[i];
-    sum += v * v;
-    const y = (1 - (v + 1)/2) * canvas.height;
-    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-    x += slice;
-  }
+  if(!analyser){ ctx.fillStyle='#000'; ctx.fillRect(0,0,wave.width,wave.height); return; }
+  analyser.getFloatTimeDomainData(floatBuf);
+  ctx.fillStyle='#000'; ctx.fillRect(0,0,wave.width,wave.height);
+  ctx.lineWidth=2; ctx.strokeStyle='#7cffc5'; ctx.beginPath();
+  const slice = wave.width / floatBuf.length;
+  let x=0, sum=0;
+  for(let i=0;i<floatBuf.length;i++){ const v=floatBuf[i]; sum += v*v; const y = (1 - (v+1)/2) * wave.height; if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); x+=slice; }
   ctx.stroke();
 
-  // compute RMS -> map to 0-100 and smooth
-  const rms = Math.sqrt(sum / floatBuffer.length);
-  const pre = parseFloat(preampEl.value) || 1;
-  const rawLevel = Math.min(100, Math.max(0, rms * 200 * pre / 4));
-  if (!drawLoop.prev) drawLoop.prev = rawLevel;
-  drawLoop.prev = drawLoop.prev * 0.85 + rawLevel * 0.15;
-  const displayLevel = drawLoop.prev;
-  levelDisplay.textContent = 'Level: ' + displayLevel.toFixed(2);
+  const measure = computeMeasurement();
+  if(!drawLoop.prev) drawLoop.prev = measure;
+  drawLoop.prev = drawLoop.prev*0.85 + measure*0.15;
+  drawPrev = drawLoop.prev;
+  levelDisplay.textContent = 'Level: ' + drawPrev.toFixed(2);
+  centerVal.textContent = centerHz.value + ' Hz';
+  qVal.textContent = qEl.value;
+  preampVal.textContent = parseFloat(preamp.value).toFixed(1) + '×';
+  fftCenterVal.textContent = fftCenter.value + ' Hz';
 }
 
-/* === History logging (local textarea, non-persistent besides manual download) === */
-function startHistoryLogging() {
-  if (logTimer) clearInterval(logTimer);
-  logTimer = setInterval(() => {
-    if (!analyser) return;
-    const now = new Date().toLocaleString();
-    const level = (drawLoop.prev || 0).toFixed(2);
-    const line = `${now}  Level: ${level}`;
-    historyRecords.push(line);
-    historyArea.value += line + '\n';
-    historyArea.scrollTop = historyArea.scrollHeight;
-  }, 500);
+/* mapping */
+function mapValue(level){ const s = parseFloat(mapScale.value)||1; const o = parseFloat(mapOffset.value)||0; return s*level + o; }
+
+/* timeout parse */
+function parseTimeoutText2(t){ if(!t) return 3000; const m = String(t).match(/(-?\d+(\.\d+)?)(\s*(ms|s))?/i); if(!m) return 3000; let num = parseFloat(m[1]); const unit = (m[4]||'').toLowerCase(); if(unit==='s') num = num*1000; return Math.round(num); }
+
+/* build GET URL and include walk/run when sendFormat === 'get' */
+function buildGetUrl(mapped){
+  let base = (targetUrl.value && targetUrl.value.trim()) || (location.origin + '/');
+  let u;
+  try{ u = new URL(base, location.href); }catch(e){ u = new URL(location.origin + '/'); }
+  u.searchParams.set('level', mapped);
+  // include walk/run only for GET
+  try{
+    const w = (walkInput && walkInput.value) ? walkInput.value : null;
+    const r = (runInput && runInput.value) ? runInput.value : null;
+    if(w !== null && w !== undefined) u.searchParams.set('walk', w);
+    if(r !== null && r !== undefined) u.searchParams.set('run', r);
+  }catch(e){}
+  if(portOverride.value) u.port = portOverride.value.trim();
+  return u.toString();
 }
 
-/* Clear history */
-clearHistory.addEventListener('click', () => {
-  historyRecords = [];
-  historyArea.value = '';
-});
-
-/* Download history */
-downloadHistory.addEventListener('click', () => {
-  const blob = new Blob([historyArea.value], { type: 'text/plain' });
-  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-  a.download = `history_${new Date().toISOString().replace(/[:.]/g,'-')}.txt`;
-  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
-});
-
-/* === Send logic === */
-function defaultRoot() {
-  return location.origin + '/';
-}
-
-function buildUrlWithLevel(base, level) {
-  try {
-    const u = new URL(base);
-    u.searchParams.set('level', level);
+/* WS helpers */
+function buildWsUrl(){
+  const t = (targetUrl.value && targetUrl.value.trim()) || (location.origin + '/');
+  try{
+    if(/^ws:\/\//i.test(t) || /^wss:\/\//i.test(t)){
+      const u = new URL(t, location.href);
+      if(portOverride.value) u.port = portOverride.value.trim();
+      return u.toString();
+    }
+    const u = new URL(t, location.href);
+    const secure = (u.protocol === 'https:');
+    u.protocol = secure ? 'wss:' : 'ws:';
+    if(portOverride.value) u.port = portOverride.value.trim();
     return u.toString();
-  } catch (e) {
-    const sep = base.includes('?') ? '&' : '?';
-    return base + sep + 'level=' + encodeURIComponent(level);
+  }catch(e){
+    const base = location.origin;
+    const u = new URL(base);
+    u.protocol = u.protocol === 'https:' ? 'wss:' : 'ws:';
+    if(portOverride.value) u.port = portOverride.value.trim();
+    return u.toString();
   }
 }
 
-async function sendDisplayedLevelOnce() {
-  const target = (sendUrlEl.value && sendUrlEl.value.trim()) || defaultRoot();
-  const level = ((drawLoop && drawLoop.prev) ? drawLoop.prev : 0).toFixed(2);
-  const url = buildUrlWithLevel(target, level);
-  const timeoutMs = parseInt(timeoutEl.value, 10) || 3000;
-  // save chosen url/timeout for restore
-  try { localStorage.setItem(STORAGE_TIMEOUT, String(timeoutMs)); localStorage.setItem(STORAGE_SEND_URL, sendUrlEl.value || ''); } catch(e){}
+/* WS connection with heartbeat + reconnect */
+let ws = null, wsBackoff = 500, wsMaxBackoff = 10000, wsHeartbeatTimer = null, wsReconnectTimer = null;
+function connectWebSocket(){
+  if(ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+  const url = buildWsUrl();
+  appendLog('WS connecting → ' + url);
+  connStatus.textContent = 'WS: connecting';
+  try{ ws = new WebSocket(url); } catch(err){ appendLog('WS create error: ' + err.message); connStatus.textContent='WS: error'; scheduleReconnect(); return; }
 
-  const controller = new AbortController();
-  const tid = setTimeout(() => controller.abort(), timeoutMs);
-  const ts = new Date().toLocaleString();
-  try {
-    const resp = await fetch(url, { method: 'GET', signal: controller.signal, cache: 'no-store' });
-    clearTimeout(tid);
-    appendSendLog(`${url} → ${resp.ok ? 'OK' : 'ERR ' + resp.status}`);
-    // store last sent info
-    try { localStorage.setItem(STORAGE_SEND_LOG_LAST, JSON.stringify({ ts, url, level: level })); } catch(e){}
-  } catch (err) {
-    clearTimeout(tid);
-    appendSendLog(`${url} → TIMEOUT/ERR (${err && err.name ? err.name : String(err)})`);
-    try { localStorage.setItem(STORAGE_SEND_LOG_LAST, JSON.stringify({ ts, url, level: level, error: err && err.message ? err.message : String(err) })); } catch(e){}
+  ws.onopen = () => { appendLog('WS open'); connStatus.textContent='WS: open'; wsBackoff = 500; startHeartbeat(); };
+  ws.onmessage = (ev) => { serverMsg.textContent = typeof ev.data === 'string' ? ev.data : '[binary]'; appendLog('WS ← ' + serverMsg.textContent); try{ const obj = JSON.parse(ev.data); handleServerMessage(obj); }catch(e){} };
+  ws.onclose = (ev) => { appendLog('WS closed'); connStatus.textContent='WS: closed'; stopHeartbeat(); if(autoReconnectEl.checked) scheduleReconnect(); };
+  ws.onerror = (err) => { appendLog('WS error'); connStatus.textContent='WS: error'; stopHeartbeat(); };
+}
+
+function wsDisconnect(){ if(ws){ try{ ws.close(); }catch(e){} ws=null; } stopHeartbeat(); connStatus.textContent='WS: disconnected'; appendLog('WS disconnected by user'); if(wsReconnectTimer){ clearTimeout(wsReconnectTimer); wsReconnectTimer=null; } }
+
+function scheduleReconnect(){ if(!autoReconnectEl.checked) return; const delay = Math.min(wsBackoff + Math.random()*200, wsMaxBackoff); appendLog('Reconnecting WS in ' + Math.round(delay) + ' ms'); if(wsReconnectTimer) clearTimeout(wsReconnectTimer); wsReconnectTimer = setTimeout(()=>{ wsReconnectTimer=null; connectWebSocket(); wsBackoff = Math.min(wsBackoff * 1.8, wsMaxBackoff); }, delay); }
+
+function startHeartbeat(){ stopHeartbeat(); const interval = Math.max(1000, parseInt(heartbeatInput.value,10) || 5000); wsHeartbeatTimer = setInterval(()=>{ if(ws && ws.readyState === WebSocket.OPEN){ try{ const ping = JSON.stringify({ type:'ping', ts: new Date().toISOString() }); ws.send(ping); appendLog('WS → ping'); }catch(e){ appendLog('WS ping failed'); } } }, interval); }
+function stopHeartbeat(){ if(wsHeartbeatTimer){ clearInterval(wsHeartbeatTimer); wsHeartbeatTimer=null; } }
+
+function handleServerMessage(obj){
+  try{ serverMsg.textContent = JSON.stringify(obj); }catch(e){}
+  if(obj && obj.ack){ appendLog('Server ACK: ' + JSON.stringify(obj)); }
+  if(obj && obj.command === 'set' && obj.field){
+    const field = obj.field; const value = obj.value;
+    appendLog('Server command set ' + field + ' = ' + value);
+    if(field === 'preamp' && value !== undefined){ preamp.value = value; preamp.dispatchEvent(new Event('input')); }
+    if(field === 'sendInterval' && value !== undefined){ sendIntervalEl.value = value; }
+    if(field === 'enableSend' && value !== undefined){ enableSend.checked = !!value; startSendLoopIfNeeded(); }
+    if(field === 'mapScale' && value !== undefined){ mapScale.value = value; }
+    if(field === 'mapOffset' && value !== undefined){ mapOffset.value = value; }
+  }
+  if(obj && obj.command === 'action' && obj.name){
+    appendLog('Server requested action: ' + obj.name);
+    lastPreview.textContent = 'SERVER ACTION: ' + obj.name;
   }
 }
 
-function startSendLoopIfNeeded() {
-  if (sendTimer) { clearInterval(sendTimer); sendTimer = null; }
-  if (!enableSendEl.checked) return;
-  const intervalMs = Math.max(100, parseInt(intervalEl.value, 10) || 1000);
-  // initial immediate send then periodic
-  sendDisplayedLevelOnce();
-  sendTimer = setInterval(sendDisplayedLevelOnce, intervalMs);
+function wsSend(obj){
+  if(!ws || ws.readyState !== WebSocket.OPEN){ appendLog('WS not open — cannot send'); connStatus.textContent='WS: not open'; return false; }
+  try{ const str = JSON.stringify(obj); ws.send(str); appendLog('WS → ' + str); lastPreview.textContent = str; return true; } catch(e){ appendLog('WS send error: ' + e.message); return false; }
 }
 
-/* Wire send controls */
-enableSendEl.addEventListener('change', startSendLoopIfNeeded);
-intervalEl.addEventListener('change', startSendLoopIfNeeded);
-testSendBtn.addEventListener('click', sendDisplayedLevelOnce);
+/* unified send (ws or http), GET includes walk/run params */
+async function sendMappedOnce(mappedRounded){
+  const transport = transportSelect.value;
+  if(transport === 'ws'){
+    if(!ws || ws.readyState !== WebSocket.OPEN){ appendLog('WS not connected — trying connect'); connectWebSocket(); await new Promise(r=>setTimeout(r,150)); if(!ws || ws.readyState !== WebSocket.OPEN){ appendLog('WS still not ready — abort'); return false; } }
+    const body = {}; body[jsonField.value || 'level'] = mappedRounded; body.ts = new Date().toISOString();
+    wsSend(body);
+    return true;
+  }
 
-/* Persist send log controls */
-clearLogBtn.addEventListener('click', () => { sendLogEl.value = ''; try { localStorage.removeItem(STORAGE_SEND_LOG); } catch(e){} });
-downloadLogBtn.addEventListener('click', () => {
-  const blob = new Blob([sendLogEl.value], { type: 'text/plain' });
-  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-  a.download = `send_log_${new Date().toISOString().replace(/[:.]/g,'-')}.txt`;
-  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
-});
+  // HTTP path
+  const timeoutMs = parseTimeoutText2(timeoutInput.value);
+  const fmt = sendFormat.value;
+  const url = buildGetUrl(mappedRounded); // buildGetUrl includes walk/run for GET case
 
-/* === UI value displays and handlers === */
-preampEl.addEventListener('input', () => {
-  const v = parseFloat(preampEl.value) || 1;
-  preampVal.textContent = v.toFixed(1) + '×';
-  if (gainNode) gainNode.gain.value = v;
-});
-filterModeEl.addEventListener('change', () => setFilterParams());
-centerHzEl.addEventListener('input', () => {
-  centerVal.textContent = centerHzEl.value + ' Hz'; setFilterParams();
-});
-qEl.addEventListener('input', () => { qVal.textContent = qEl.value; setFilterParams(); });
+  if(fmt === 'json'){
+    const body = {}; body[jsonField.value||'level'] = mappedRounded; body.ts = new Date().toISOString();
+    lastPreview.textContent = JSON.stringify(body);
+    let tries = 0, maxTry = parseInt(maxRetriesEl.value,10)||0;
+    while(tries <= maxTry){
+      tries++;
+      const ctrl = new AbortController(); const id = setTimeout(()=>ctrl.abort(), timeoutMs);
+      try{
+        const resp = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body), signal: ctrl.signal });
+        clearTimeout(id);
+        appendLog(`POST ${url} → ${resp.ok ? 'OK':'ERR '+resp.status} tries=${tries}`);
+        if(resp.ok) return true;
+        if(tries>maxTry) return false;
+      }catch(err){
+        clearTimeout(id); appendLog('POST error ' + (err && err.name) + ' tries=' + tries);
+        if(tries>maxTry) return false;
+        await new Promise(r=>setTimeout(r, parseInt(retryDelay.value,10)||400));
+      }
+    }
+    return false;
+  } else {
+    // GET (url already contains level & walk/run)
+    lastPreview.textContent = url;
+    let tries = 0, maxTry = parseInt(maxRetriesEl.value,10)||0;
+    while(tries <= maxTry){
+      tries++;
+      const ctrl = new AbortController(); const id = setTimeout(()=>ctrl.abort(), timeoutMs);
+      try{
+        const resp = await fetch(url, { method:'GET', signal: ctrl.signal });
+        clearTimeout(id);
+        appendLog(`GET ${url} → ${resp.ok ? 'OK':'ERR '+resp.status} tries=${tries}`);
+        if(resp.ok) return true;
+        if(tries>maxTry) return false;
+      }catch(err){
+        clearTimeout(id); appendLog('GET error ' + (err && err.name) + ' tries=' + tries);
+        if(tries>maxTry) return false;
+        await new Promise(r=>setTimeout(r, parseInt(retryDelay.value,10)||400));
+      }
+    }
+    return false;
+  }
+}
 
-/* === Start/Stop wiring === */
+/* change-based / interval sending loop */
+let intervalHandle = null;
+async function maybeSendChange(){
+  const mode = document.getElementById('sendMode') ? document.getElementById('sendMode').value : 'interval';
+  const mapped = Number(mapValue(drawPrev).toFixed(2));
+  if(mode === 'interval') return;
+  const thr = parseFloat(document.getElementById('threshold') ? document.getElementById('threshold').value : 2) || 1;
+  const hyst = parseFloat(document.getElementById('hysteresis') ? document.getElementById('hysteresis').value : 0.5) || 0;
+  const minGapMs = parseInt(document.getElementById('minGap') ? document.getElementById('minGap').value : 500,10) || 200;
+  if(!maybeSendChange.lastSent){
+    maybeSendChange.lastSent = { value: mapped, time: 0 };
+  }
+  const now = Date.now();
+  const diff = Math.abs(mapped - maybeSendChange.lastSent.value);
+  if(diff >= Math.max(thr, hyst) && now - maybeSendChange.lastSent.time >= minGapMs){
+    maybeSendChange.lastSent.value = mapped;
+    maybeSendChange.lastSent.time = now;
+    await sendMappedOnce(mapped);
+  }
+}
+
+function startSendLoopIfNeeded(){
+  if(intervalHandle) clearInterval(intervalHandle);
+  if(!enableSend.checked) return;
+  if(transportSelect.value === 'ws') connectWebSocket();
+  const cb = async ()=> {
+    const mode = document.getElementById('sendMode') ? document.getElementById('sendMode').value : 'interval';
+    if(mode === 'interval'){
+      const mapped = Number(mapValue(drawPrev).toFixed(2));
+      await sendMappedOnce(mapped);
+    } else {
+      await maybeSendChange();
+    }
+  };
+  cb();
+  intervalHandle = setInterval(cb, Math.max(50, parseInt(sendIntervalEl.value,10) || 500));
+}
+
+/* UI bindings */
 startBtn.addEventListener('click', startMic);
 stopBtn.addEventListener('click', stopMic);
 
-/* === Restore last send log last info badge (if needed) === */
-(function restoreLastSentDisplay() {
-  try {
-    const last = localStorage.getItem(STORAGE_SEND_LOG_LAST);
-    if (last) {
-      const obj = JSON.parse(last);
-      appendSendLog(`(restored last) ${obj.ts || ''} Sent ${obj.url || ''} level=${obj.level || ''}`);
-    }
-  } catch(e){}
-})();
+preamp.addEventListener('input', ()=>{ preampVal.textContent = parseFloat(preamp.value).toFixed(1)+'×'; if(gainNode) gainNode.gain.value = parseFloat(preamp.value); });
+filterMode.addEventListener('change', setFilter);
+centerHz.addEventListener('input', ()=>{ centerVal.textContent = centerHz.value + ' Hz'; setFilter(); });
+qEl.addEventListener('input', ()=>{ qVal.textContent = qEl.value; setFilter(); });
+fftCenter.addEventListener('input', ()=>{ fftCenterVal.textContent = fftCenter.value + ' Hz'; });
 
-/* Cleanup on leave */
-window.addEventListener('pagehide', () => {
-  try { if (sendTimer) clearInterval(sendTimer); if (logTimer) clearInterval(logTimer); } catch(e){}
-  try { if (mediaStream) mediaStream.getTracks().forEach(t => t.stop()); } catch(e){}
+document.getElementById('wsToggle').addEventListener('click', ()=>{ if(ws && ws.readyState === WebSocket.OPEN){ wsDisconnect(); wsToggle.textContent='Connect WS'; } else { connectWebSocket(); wsToggle.textContent='Disconnect WS'; } });
+transportSelect.addEventListener('change', ()=>{ if(transportSelect.value === 'ws') connectWebSocket(); startSendLoopIfNeeded(); });
+enableSend.addEventListener('change', startSendLoopIfNeeded);
+sendIntervalEl.addEventListener('change', startSendLoopIfNeeded);
+
+document.getElementById('sendNow')?.addEventListener('click', async ()=>{ const mapped = Number(mapValue(drawPrev).toFixed(2)); await sendMappedOnce(mapped); });
+
+clearLogBtn.addEventListener('click', ()=>{ sendLogArea.value=''; try{ localStorage.removeItem(STORE_LOG); }catch(e){} });
+downloadLogBtn.addEventListener('click', ()=>{ const b = new Blob([sendLogArea.value], {type:'text/plain'}); const a=document.createElement('a'); a.href = URL.createObjectURL(b); a.download='send_log.txt'; a.click(); });
+
+calibrateBtn.addEventListener('click', async ()=>{
+  if(!analyser){ alert('Start mic first'); return; }
+  appendLog('Calibrating 3s...');
+  const samples = []; const start = Date.now();
+  while(Date.now() - start < 3000){ samples.push(computeMeasurement()); await new Promise(r=>setTimeout(r,150)); }
+  const min = Math.min(...samples), max = Math.max(...samples);
+  appendLog(`Cal done min=${min.toFixed(2)} max=${max.toFixed(2)}`);
+  const suggestedScale = (100) / Math.max(0.0001, (max - min));
+  const suggestedOffset = -suggestedScale * min;
+  appendLog(`suggest scale=${suggestedScale.toFixed(3)} offset=${suggestedOffset.toFixed(2)}`);
+  mapScale.value = suggestedScale.toFixed(3);
+  mapOffset.value = suggestedOffset.toFixed(2);
+});
+
+/* cleanup */
+window.addEventListener('pagehide', ()=>{
+  try{ if(intervalHandle) clearInterval(intervalHandle); if(ws) ws.close(); }catch(e){}
+  try{ if(mediaStream) mediaStream.getTracks().forEach(t=>t.stop()); }catch(e){}
 });
 </script>
 </body>

@@ -1,40 +1,52 @@
 const http = require('http');
 const fs = require('fs');
 const { exec } = require('child_process');
+const path = require('path');
 
-const PORT = 3000;
-const WKEY_PATH = 'D:\\miscD\\cycletreadmill\\wkey.exe';
+const WKEY_PATH = path.join(__dirname, 'wkey.exe');
+const TIMEOUT_MS = 2000; // auto-release delay
 
-const server = http.createServer((req, res) => {
+let holding = false;
+let releaseTimer = null;
+
+function sendKey(cmd) {
+  exec(`"${WKEY_PATH}" ${cmd}`);
+  console.log(`→ wkey.exe ${cmd}`);
+  holding = cmd === 'down';
+}
+
+function resetReleaseTimer() {
+  if (releaseTimer) clearTimeout(releaseTimer);
+  releaseTimer = setTimeout(() => {
+    if (holding) {
+      sendKey('up');
+      console.log('🕒 Auto-released (no requests)');
+    }
+  }, TIMEOUT_MS);
+}
+
+http.createServer((req, res) => {
   const url = new URL(req.url, 'http://localhost');
+  const level = parseFloat(url.searchParams.get('level'));
+  const walk = parseFloat(url.searchParams.get('walk')) || 1.5;
 
-  // If no "level" param → serve index.html
+  // Serve index.html if no ?level param
   if (!url.searchParams.has('level')) {
-    fs.readFile('index.html', (err, data) => {
-      if (err) {
-        res.writeHead(404, { 'Content-Type': 'text/plain' });
-        res.end('index.html not found');
-      } else {
-        res.writeHead(200, { 'Content-Type': 'text/html' });
-        res.end(data);
-      }
+    fs.readFile(path.join(__dirname, 'index.html'), (err, data) => {
+      res.writeHead(err ? 404 : 200, { 'Content-Type': 'text/html' });
+      res.end(err ? 'index.html not found' : data);
     });
     return;
   }
 
-  // Otherwise → handle level param
-  const level = parseFloat(url.searchParams.get('level'));
   if (isNaN(level)) {
     res.end('Usage: ?level=NUMBER');
     return;
   }
 
-  const cmd = level > 1.5 ? 'down' : 'up';
-  exec(`"${WKEY_PATH}" ${cmd}`);
-  console.log(`→ wkey.exe ${cmd}`);
-  res.end(`Sent: ${cmd}`);
-});
+  const cmd = level > walk ? 'down' : 'up';
+  if (holding !== (cmd === 'down')) sendKey(cmd);
 
-server.listen(PORT, () =>
-  console.log(`✅ Server running → http://localhost:${PORT}`)
-);
+  resetReleaseTimer(); // restart inactivity timer
+  res.end(`sent: ${cmd}`);
+}).listen(3000, () => console.log('✅ Server on http://localhost:3000'));
