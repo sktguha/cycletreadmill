@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sound Visualizer — Full (Filters + Send to Root + Timeout + Log)</title>
+  <style>
+    body { background:#0b0b0b; margin:0; font-family:system-ui, sans-serif; color:#dfeee3;
+      display:flex;flex-direction:column;align-items:center;padding:12px;gap:10px;}
+    h2 { color:#7cffc5; margin:6px 0; }
+    .panel { width:92%; max-width:1200px; display:flex; gap:12px; }
+    .left { flex:1; }
+    .right { width:420px; display:flex; flex-direction:column; gap:8px; }
+    canvas { width:100%; height:300px; background:#000; border-radius:10px;
+      box-shadow:0 8px 30px rgba(0,255,180,0.06); display:block; }
+    #level { font-size:1.6em; color:#0bff8a; font-weight:700; }
+    input[type="text"], textarea, input[type="number"], select {
+      width:100%; box-sizing:border-box; font-family:monospace; padding:8px;
+      border-radius:8px; border:1px solid #222; background:#050505; color:#dfeee3;
+    }
+    textarea { height:160px; resize:vertical; }
+    button { background:#0b84ff; color:#fff; border:none; padding:8px 12px;
+      border-radius:8px; cursor:pointer; }
+    .small { font-size:13px; padding:6px 8px; }
+    label { font-size:13px; color:#bfbfbf; display:flex; align-items:center; gap:8px; }
+    .controls { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:8px;}
+    input[type="range"] { width:160px; }
+    .value { min-width:64px; text-align:right; color:#bff8d9; font-weight:700; }
+    .hint { font-size:12px; color:#9aa; margin-top:6px; }
+  </style>
+</head>
+<body>
+  <h2>🎤 Sound Visualizer — Full (Filters + Send to Root + Timeout + Log)</h2>
+
+  <div class="panel">
+    <div class="left">
+      <canvas id="wave"></canvas>
+
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
+        <div id="level">Level: 0.0</div>
+        <div>
+          <button id="startBtn">Start Mic</button>
+          <button id="stopBtn" class="small" disabled>Stop</button>
+        </div>
+      </div>
+
+      <div class="controls" style="margin-top:12px;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <label>Preamp
+            <input id="preamp" type="range" min="1" max="16" step="0.5" value="4">
+          </label>
+          <div class="value" id="preampVal">4.0×</div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:8px;">
+          <label>Filter
+            <select id="filterMode">
+              <option value="off">Off</option>
+              <option value="bandpass" selected>Band-pass</option>
+              <option value="lowpass">Low-pass</option>
+              <option value="highpass">High-pass</option>
+            </select>
+          </label>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:8px;">
+          <label>Center Hz
+            <input id="centerHz" type="range" min="40" max="2000" step="10" value="200">
+          </label>
+          <div class="value" id="centerVal">200 Hz</div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:8px;">
+          <label>Q
+            <input id="q" type="range" min="0.2" max="10" step="0.1" value="1.2">
+          </label>
+          <div class="value" id="qVal">1.2</div>
+        </div>
+      </div>
+
+      <div class="hint">Tip: For treadmill motors try Band-pass ~100–500Hz, Q 1–4 and increase Preamp to 6–12 if needed.</div>
+
+      <div style="margin-top:12px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <button id="clearHist" class="small">Clear Wave History</button>
+        <div class="hint" id="histNote">Wave history stored in memory only (not persisted).</div>
+      </div>
+
+    </div>
+
+    <div class="right">
+      <div style="font-weight:700; color:#bff8d9;">History Log</div>
+      <textarea id="history" readonly placeholder="Level history (timestamps)"></textarea>
+
+      <div style="display:flex;gap:8px;">
+        <button id="downloadHistory" class="small">Download History</button>
+        <button id="clearHistory" class="small">Clear</button>
+      </div>
+
+      <hr style="border:none; height:1px; background:#222; margin:8px 0;">
+
+      <label>URL to send level (default = root `/` of current origin):</label>
+      <input id="sendUrl" type="text" placeholder="(leave empty → auto send to / )" />
+
+      <div style="display:flex; gap:8px; align-items:center; margin-top:6px;">
+        <label><input id="enableSend" type="checkbox" checked> Enable sending</label>
+        <label>Interval(ms): <input id="interval" type="number" min="100" value="1000" style="width:90px;"></label>
+      </div>
+
+      <div style="display:flex; gap:8px; align-items:center; margin-top:6px;">
+        <label>Timeout(ms): <input id="timeout" type="number" min="100" value="3000" style="width:90px;"></label>
+        <button id="testSend" class="small">Send Now</button>
+      </div>
+
+      <label style="margin-top:8px;">Send Log (persistent)</label>
+      <textarea id="sendLog" readonly placeholder="Send attempts + status (saved to localStorage)"></textarea>
+
+      <div style="display:flex; gap:8px; margin-top:6px;">
+        <button id="clearLog" class="small">Clear Log</button>
+        <button id="downloadLog" class="small">Download Log</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* === Elements === */
+const canvas = document.getElementById('wave'), ctx = canvas.getContext('2d');
+const startBtn = document.getElementById('startBtn'), stopBtn = document.getElementById('stopBtn');
+const levelDisplay = document.getElementById('level');
+
+const preampEl = document.getElementById('preamp'), preampVal = document.getElementById('preampVal');
+const filterModeEl = document.getElementById('filterMode'), centerHzEl = document.getElementById('centerHz');
+const centerVal = document.getElementById('centerVal'), qEl = document.getElementById('q'), qVal = document.getElementById('qVal');
+
+const historyArea = document.getElementById('history');
+const clearHistory = document.getElementById('clearHistory'), downloadHistory = document.getElementById('downloadHistory');
+
+const sendUrlEl = document.getElementById('sendUrl'), enableSendEl = document.getElementById('enableSend');
+const intervalEl = document.getElementById('interval'), timeoutEl = document.getElementById('timeout'), testSendBtn = document.getElementById('testSend');
+
+const sendLogEl = document.getElementById('sendLog'), clearLogBtn = document.getElementById('clearLog'), downloadLogBtn = document.getElementById('downloadLog');
+
+const STORAGE_SEND_LOG = 'sv_send_log_v2';
+const STORAGE_TIMEOUT = 'sv_timeout_v2';
+const STORAGE_SEND_URL = 'sv_send_url_v2';
+const STORAGE_SEND_LOG_LAST = 'sv_send_log_last_v2';
+
+/* === Audio nodes & state === */
+let audioCtx = null, mediaStream = null, source = null, analyser = null, gainNode = null, biquad = null;
+let floatBuffer = null;
+let drawPrev = 0;
+let historyRecords = [];
+let sendTimer = null;
+let logTimer = null;
+
+/* === Canvas resize === */
+function resizeCanvas() {
+  canvas.width = canvas.clientWidth;
+  canvas.height = canvas.clientHeight;
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+/* === Restore persistent send log + timeout + url === */
+function restorePersistent() {
+  const savedLog = localStorage.getItem(STORAGE_SEND_LOG);
+  if (savedLog) sendLogEl.value = savedLog;
+  const t = localStorage.getItem(STORAGE_TIMEOUT);
+  if (t) timeoutEl.value = t;
+  const u = localStorage.getItem(STORAGE_SEND_URL);
+  if (u) sendUrlEl.value = u;
+}
+restorePersistent();
+
+/* === Utility: append log and persist === */
+function appendSendLog(line) {
+  const ts = new Date().toLocaleString();
+  const entry = `[${ts}] ${line}`;
+  sendLogEl.value += entry + '\n';
+  sendLogEl.scrollTop = sendLogEl.scrollHeight;
+  try { localStorage.setItem(STORAGE_SEND_LOG, sendLogEl.value); } catch(e){}
+}
+
+/* === Start/Stop mic === */
+async function startMic() {
+  try {
+    mediaStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false
+      }
+    });
+  } catch (e) {
+    alert('Microphone access denied/failed: ' + (e.message || e));
+    return;
+  }
+
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  source = audioCtx.createMediaStreamSource(mediaStream);
+
+  // gain (preamp)
+  gainNode = audioCtx.createGain();
+  gainNode.gain.value = parseFloat(preampEl.value) || 1;
+
+  // biquad filter
+  biquad = audioCtx.createBiquadFilter();
+  setFilterParams();
+
+  // analyser for waveform / RMS
+  analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 4096;
+  floatBuffer = new Float32Array(analyser.fftSize);
+
+  // connect nodes
+  if (filterModeEl.value === 'off') {
+    source.connect(gainNode);
+  } else {
+    source.connect(biquad);
+    biquad.connect(gainNode);
+  }
+  gainNode.connect(analyser);
+
+  startBtn.disabled = true;
+  stopBtn.disabled = false;
+
+  // start loops
+  requestAnimationFrame(drawLoop);
+  startHistoryLogging();
+
+  // start send loop if enabled
+  startSendLoopIfNeeded();
+}
+
+/* === Stop === */
+function stopMic() {
+  if (sendTimer) { clearInterval(sendTimer); sendTimer = null; }
+  if (logTimer) { clearInterval(logTimer); logTimer = null; }
+  try { if (mediaStream) mediaStream.getTracks().forEach(t => t.stop()); } catch(e){}
+  try { if (audioCtx) audioCtx.close(); } catch(e){}
+  audioCtx = null; mediaStream = null; source = null; analyser = null; gainNode = null; biquad = null;
+  startBtn.disabled = false; stopBtn.disabled = true;
+}
+
+/* === Filter params === */
+function setFilterParams() {
+  if (!biquad || !source || !gainNode) return;
+  const mode = filterModeEl.value;
+  if (mode === 'off') {
+    try { source.disconnect(); } catch(e){}
+    try { biquad.disconnect(); } catch(e){}
+    try { source.connect(gainNode); } catch(e){}
+    return;
+  }
+  biquad.type = mode;
+  biquad.frequency.value = parseFloat(centerHzEl.value) || 200;
+  biquad.Q.value = parseFloat(qEl.value) || 1;
+  try { source.disconnect(); } catch(e){}
+  try { biquad.disconnect(); } catch(e){}
+  source.connect(biquad);
+  biquad.connect(gainNode);
+}
+
+/* === Draw loop & level calculation === */
+function drawLoop() {
+  requestAnimationFrame(drawLoop);
+  if (!analyser) {
+    // clear canvas
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0,0,canvas.width, canvas.height);
+    return;
+  }
+
+  analyser.getFloatTimeDomainData(floatBuffer);
+
+  // draw waveform
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0,0,canvas.width, canvas.height);
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = '#7cffc5';
+  ctx.beginPath();
+
+  const slice = canvas.width / floatBuffer.length;
+  let x = 0;
+  let sum = 0;
+  for (let i = 0; i < floatBuffer.length; i++) {
+    const v = floatBuffer[i];
+    sum += v * v;
+    const y = (1 - (v + 1)/2) * canvas.height;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    x += slice;
+  }
+  ctx.stroke();
+
+  // compute RMS -> map to 0-100 and smooth
+  const rms = Math.sqrt(sum / floatBuffer.length);
+  const pre = parseFloat(preampEl.value) || 1;
+  const rawLevel = Math.min(100, Math.max(0, rms * 200 * pre / 4));
+  if (!drawLoop.prev) drawLoop.prev = rawLevel;
+  drawLoop.prev = drawLoop.prev * 0.85 + rawLevel * 0.15;
+  const displayLevel = drawLoop.prev;
+  levelDisplay.textContent = 'Level: ' + displayLevel.toFixed(2);
+}
+
+/* === History logging (local textarea, non-persistent besides manual download) === */
+function startHistoryLogging() {
+  if (logTimer) clearInterval(logTimer);
+  logTimer = setInterval(() => {
+    if (!analyser) return;
+    const now = new Date().toLocaleString();
+    const level = (drawLoop.prev || 0).toFixed(2);
+    const line = `${now}  Level: ${level}`;
+    historyRecords.push(line);
+    historyArea.value += line + '\n';
+    historyArea.scrollTop = historyArea.scrollHeight;
+  }, 500);
+}
+
+/* Clear history */
+clearHistory.addEventListener('click', () => {
+  historyRecords = [];
+  historyArea.value = '';
+});
+
+/* Download history */
+downloadHistory.addEventListener('click', () => {
+  const blob = new Blob([historyArea.value], { type: 'text/plain' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = `history_${new Date().toISOString().replace(/[:.]/g,'-')}.txt`;
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
+});
+
+/* === Send logic === */
+function defaultRoot() {
+  return location.origin + '/';
+}
+
+function buildUrlWithLevel(base, level) {
+  try {
+    const u = new URL(base);
+    u.searchParams.set('level', level);
+    return u.toString();
+  } catch (e) {
+    const sep = base.includes('?') ? '&' : '?';
+    return base + sep + 'level=' + encodeURIComponent(level);
+  }
+}
+
+async function sendDisplayedLevelOnce() {
+  const target = (sendUrlEl.value && sendUrlEl.value.trim()) || defaultRoot();
+  const level = ((drawLoop && drawLoop.prev) ? drawLoop.prev : 0).toFixed(2);
+  const url = buildUrlWithLevel(target, level);
+  const timeoutMs = parseInt(timeoutEl.value, 10) || 3000;
+  // save chosen url/timeout for restore
+  try { localStorage.setItem(STORAGE_TIMEOUT, String(timeoutMs)); localStorage.setItem(STORAGE_SEND_URL, sendUrlEl.value || ''); } catch(e){}
+
+  const controller = new AbortController();
+  const tid = setTimeout(() => controller.abort(), timeoutMs);
+  const ts = new Date().toLocaleString();
+  try {
+    const resp = await fetch(url, { method: 'GET', signal: controller.signal, cache: 'no-store' });
+    clearTimeout(tid);
+    appendSendLog(`${url} → ${resp.ok ? 'OK' : 'ERR ' + resp.status}`);
+    // store last sent info
+    try { localStorage.setItem(STORAGE_SEND_LOG_LAST, JSON.stringify({ ts, url, level: level })); } catch(e){}
+  } catch (err) {
+    clearTimeout(tid);
+    appendSendLog(`${url} → TIMEOUT/ERR (${err && err.name ? err.name : String(err)})`);
+    try { localStorage.setItem(STORAGE_SEND_LOG_LAST, JSON.stringify({ ts, url, level: level, error: err && err.message ? err.message : String(err) })); } catch(e){}
+  }
+}
+
+function startSendLoopIfNeeded() {
+  if (sendTimer) { clearInterval(sendTimer); sendTimer = null; }
+  if (!enableSendEl.checked) return;
+  const intervalMs = Math.max(100, parseInt(intervalEl.value, 10) || 1000);
+  // initial immediate send then periodic
+  sendDisplayedLevelOnce();
+  sendTimer = setInterval(sendDisplayedLevelOnce, intervalMs);
+}
+
+/* Wire send controls */
+enableSendEl.addEventListener('change', startSendLoopIfNeeded);
+intervalEl.addEventListener('change', startSendLoopIfNeeded);
+testSendBtn.addEventListener('click', sendDisplayedLevelOnce);
+
+/* Persist send log controls */
+clearLogBtn.addEventListener('click', () => { sendLogEl.value = ''; try { localStorage.removeItem(STORAGE_SEND_LOG); } catch(e){} });
+downloadLogBtn.addEventListener('click', () => {
+  const blob = new Blob([sendLogEl.value], { type: 'text/plain' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = `send_log_${new Date().toISOString().replace(/[:.]/g,'-')}.txt`;
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
+});
+
+/* === UI value displays and handlers === */
+preampEl.addEventListener('input', () => {
+  const v = parseFloat(preampEl.value) || 1;
+  preampVal.textContent = v.toFixed(1) + '×';
+  if (gainNode) gainNode.gain.value = v;
+});
+filterModeEl.addEventListener('change', () => setFilterParams());
+centerHzEl.addEventListener('input', () => {
+  centerVal.textContent = centerHzEl.value + ' Hz'; setFilterParams();
+});
+qEl.addEventListener('input', () => { qVal.textContent = qEl.value; setFilterParams(); });
+
+/* === Start/Stop wiring === */
+startBtn.addEventListener('click', startMic);
+stopBtn.addEventListener('click', stopMic);
+
+/* === Restore last send log last info badge (if needed) === */
+(function restoreLastSentDisplay() {
+  try {
+    const last = localStorage.getItem(STORAGE_SEND_LOG_LAST);
+    if (last) {
+      const obj = JSON.parse(last);
+      appendSendLog(`(restored last) ${obj.ts || ''} Sent ${obj.url || ''} level=${obj.level || ''}`);
+    }
+  } catch(e){}
+})();
+
+/* Cleanup on leave */
+window.addEventListener('pagehide', () => {
+  try { if (sendTimer) clearInterval(sendTimer); if (logTimer) clearInterval(logTimer); } catch(e){}
+  try { if (mediaStream) mediaStream.getTracks().forEach(t => t.stop()); } catch(e){}
+});
+</script>
+</body>
+</html>
